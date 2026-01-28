@@ -5,6 +5,7 @@ import cowboyLogo from "@/assets/cowboy-full-logo.png";
 const residentialServices = [
   { name: "Roof Replacement", href: "/services/roof-replacement" },
   { name: "Roof Repair", href: "/services/roof-repair" },
+  { name: "Landscaping & Hardscape", href: "/services/landscaping" },
   { name: "Metal Roofing", href: "/services/metal-roofing" },
   { name: "Siding & Gutters", href: "/services/siding" },
 ];
