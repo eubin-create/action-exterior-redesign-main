@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cowboy Roofing & Exteriors Design System
+   Exact Brand Colors from Logo:
+   Navy: #0a2240
+   Red: #b3191d
+   Blue: #0033a0
+   White: #ffffff
+*/
+
+@layer base {
+  :root {
+    /* Exact Brand Colors */
+    --background: 0 0% 100%;
+    /* Pure White */
+    --foreground: 215 73% 15%;
+    /* #0a2240 Navy */
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 73% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 73% 15%;
+
+    /* Primary: Deep Navy #0a2240 */
+    --primary: 215 73% 15%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Light Cream/Gray for content blocks */
+    --secondary: 210 20% 98%;
+    --secondary-foreground: 215 73% 15%;
+
+    /* Muted: Subtle Off-White/Gray */
+    --muted: 210 20% 98%;
+    --muted-foreground: 215 20% 45%;
+
+    /* Accent: Texas Red #b3191d */
+    --accent: 358 75% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 88%;
+    --input: 215 20% 88%;
+    --ring: 215 73% 15%;
+
+    --radius: 0.5rem;
+
+    /* Custom Tokens */
+    --cowboy-navy: #0a2240;
+    --cowboy-red: #b3191d;
+    --cowboy-blue: #0033a0;
+    --cowboy-cream: #f8f9fa;
+    --cowboy-dark: #051221;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, #0a2240 0%, #051221 100%);
+    --gradient-cta: linear-gradient(135deg, #b3191d 0%, #8b1316 100%);
+    --gradient-overlay: linear-gradient(180deg, rgba(10, 34, 64, 0.9) 0%, rgba(10, 34, 64, 0.7) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px -2px rgba(10, 34, 64, 0.1);
+    --shadow-md: 0 8px 24px -4px rgba(10, 34, 64, 0.15);
+    --shadow-lg: 0 16px 48px -8px rgba(10, 34, 64, 0.2);
+    --shadow-red: 0 8px 24px -4px rgba(179, 25, 29, 0.3);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 215 73% 15%;
+    --sidebar-primary: 215 73% 15%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 20% 98%;
+    --sidebar-accent-foreground: 215 73% 15%;
+    --sidebar-border: 215 20% 88%;
+    --sidebar-ring: 215 73% 15%;
+  }
+
+  .dark {
+    --background: 215 60% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 215 60% 8%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 215 60% 8%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 215 73% 15%;
+
+    --secondary: 215 35% 18%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 215 35% 18%;
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 358 75% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 35% 20%;
+    --input: 215 35% 20%;
+    --ring: 215 73% 15%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-accent/30;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display font-bold tracking-tight text-primary;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-cta);
+  }
+
+  .bg-hero-gradient {
+    background: var(--gradient-hero);
+  }
+
+  .bg-cta-gradient {
+    background: var(--gradient-cta);
+  }
+
+  .bg-overlay-gradient {
+    background: var(--gradient-overlay);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-md);
+  }
+
+  .shadow-button {
+    box-shadow: var(--shadow-red);
+  }
+
+  .border-brand {
+    border-color: var(--cowboy-navy);
+  }
+
+  .text-brand-red {
+    color: var(--cowboy-red);
+  }
+}
