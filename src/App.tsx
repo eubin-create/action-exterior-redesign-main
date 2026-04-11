@@ -16,6 +16,7 @@ import SolarClawActivity from "./pages/solarclaw/SolarClawActivity";
 import SolarClawProspects from "./pages/solarclaw/SolarClawProspects";
 import SolarClawProposals from "./pages/solarclaw/SolarClawProposals";
 import SolarClawBuilding from "./pages/solarclaw/SolarClawBuilding";
+import { SolarClawProvider } from "./context/SolarClawContext";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <SolarClawProvider>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/about" element={<AboutPage />} />
@@ -42,6 +44,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </SolarClawProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
