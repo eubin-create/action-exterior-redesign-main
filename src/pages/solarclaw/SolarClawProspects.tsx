@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
-  ChevronUp, ChevronDown, Search, Filter, MapPin, ArrowRight, Plus,
-  Trash2, User, ChevronRight, Building2,
+  ChevronUp, ChevronDown, Search, Filter, MapPin, Plus,
+  Trash2, User, ChevronRight, Building2, Download,
 } from "lucide-react";
 import { SolarClawLayout } from "@/components/solarclaw/SolarClawLayout";
 import { AddBuildingModal } from "@/components/solarclaw/AddBuildingModal";
@@ -76,6 +76,26 @@ export default function SolarClawProspects() {
     return list;
   }, [buildings, search, urgencyFilter, sortKey, sortDir]);
 
+  function exportCSV() {
+    const headers = ["Name", "Address", "City", "State", "Year Built", "Roof Sqft", "Urgency Score", "Urgency Label", "System kW", "Panel Count", "Annual kWh", "System Cost", "Federal ITC", "25-yr Savings", "Payback Yrs", "Owner Name", "Owner Email", "Owner Phone", "Pipeline", "Proposal Status"];
+    const rows = filtered.map(b => [
+      b.name, b.address, b.city, b.state, b.yearBuilt, b.solar.roofSqft,
+      b.urgencyScore, b.urgencyLabel, b.solar.systemKw, b.solar.panelCount, b.solar.annualKwh,
+      b.itc.systemCost, b.itc.federalItc, b.itc.savings25yr, b.itc.paybackYears,
+      b.owner.name, b.owner.email, b.owner.phone, b.pipelineStatus, b.proposalStatus,
+    ]);
+    const csv = [headers, ...rows]
+      .map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `solarclaw-prospects-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const Th = ({ label, col }: { label: string; col: SortKey }) => (
     <button className="flex items-center gap-1 hover:text-zinc-200 transition-colors" onClick={() => handleSort(col)}>
       {label}
@@ -102,6 +122,12 @@ export default function SolarClawProspects() {
           <span className="bg-zinc-800 rounded-lg px-3 py-1.5 border border-zinc-700 text-xs text-zinc-400">
             {filtered.length} shown
           </span>
+          {filtered.length > 0 && (
+            <button onClick={exportCSV}
+              className="flex items-center gap-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+          )}
           <button onClick={() => setShowAddBuilding(true)}
             className="flex items-center gap-1.5 text-xs bg-sky-500 hover:bg-sky-400 text-white rounded-lg px-3 py-1.5 font-medium transition-colors">
             <Plus className="w-3.5 h-3.5" /> Add Building

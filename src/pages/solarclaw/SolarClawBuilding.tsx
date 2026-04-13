@@ -4,11 +4,12 @@ import {
   ArrowLeft, MapPin, Sun, DollarSign, Layers,
   Mail, Phone, CheckCircle, XCircle, Clock,
   TrendingUp, Zap, Building2, User, ChevronRight,
-  Eye, MessageSquare,
+  Eye, MessageSquare, Pencil, Plus, X,
 } from "lucide-react";
 import { SolarClawLayout } from "@/components/solarclaw/SolarClawLayout";
 import { AddOwnerModal } from "@/components/solarclaw/AddOwnerModal";
-import { useSolarClaw } from "@/context/SolarClawContext";
+import { EditBuildingModal } from "@/components/solarclaw/EditBuildingModal";
+import { useSolarClaw, detectPainSignals } from "@/context/SolarClawContext";
 import {
   formatCurrency, formatNumber, urgencyBg, pipelineLabel,
   proposalStatusBg, activityTypeColor,
@@ -126,12 +127,87 @@ function PipelineStepper({ current }: { current: PipelineStatus }) {
   );
 }
 
+// ── Pain signals card ──────────────────────────────────────────────────────────
+
+function PainSignalsCard({
+  buildingName, signals, onAdd, onRemove,
+}: {
+  buildingName: string;
+  signals: string[];
+  onAdd: (s: string) => void;
+  onRemove: (s: string) => void;
+}) {
+  const [customInput, setCustomInput] = useState("");
+  const suggestions = detectPainSignals(buildingName).filter(s => !signals.includes(s));
+
+  function submitCustom() {
+    const val = customInput.trim();
+    if (val && !signals.includes(val)) {
+      onAdd(val);
+      setCustomInput("");
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 space-y-3">
+      <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Pain Signals</div>
+
+      {signals.length > 0 ? (
+        <div className="space-y-1.5">
+          {signals.map(s => (
+            <div key={s} className="flex items-center gap-1.5 bg-pink-500/10 border border-pink-500/20 rounded-lg px-2.5 py-1.5">
+              <span className="text-xs">📌</span>
+              <span className="text-xs text-pink-400 flex-1">{s}</span>
+              <button onClick={() => onRemove(s)}
+                className="p-0.5 hover:bg-pink-500/20 rounded text-pink-500/50 hover:text-pink-400 transition-colors">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-zinc-600">No pain signals detected yet.</p>
+      )}
+
+      {suggestions.length > 0 && (
+        <div>
+          <div className="text-[10px] text-zinc-600 mb-1.5">Suggested:</div>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map(s => (
+              <button key={s} onClick={() => onAdd(s)}
+                className="flex items-center gap-1 text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-pink-500/40 hover:text-pink-400 rounded-full px-2 py-0.5 transition-colors">
+                <Plus className="w-2.5 h-2.5" />{s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={customInput}
+          onChange={(e) => setCustomInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submitCustom()}
+          placeholder="Add custom signal..."
+          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+        />
+        <button onClick={submitCustom}
+          className="px-2.5 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-400 hover:bg-zinc-700 transition-colors">
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export default function SolarClawBuilding() {
   const { id } = useParams<{ id: string }>();
-  const { state, sendProposal, markProposalOpened, markProposalReplied, advancePipeline } = useSolarClaw();
+  const { state, sendProposal, markProposalOpened, markProposalReplied, addPainSignal, removePainSignal } = useSolarClaw();
   const [showOwnerModal, setShowOwnerModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const building = state.buildings.find(b => b.id === id);
   if (!building) return <Navigate to="/solarclaw/prospects" replace />;
@@ -149,13 +225,15 @@ export default function SolarClawBuilding() {
   ];
 
   const hasOwner = Boolean(owner.name);
-  const currentIdx = STAGE_ORDER.indexOf(building.pipelineStatus);
   const isAtProposal = building.pipelineStatus === "proposal_sent";
 
   return (
     <SolarClawLayout>
       {showOwnerModal && (
         <AddOwnerModal building={building} onClose={() => setShowOwnerModal(false)} />
+      )}
+      {showEditModal && (
+        <EditBuildingModal building={building} onClose={() => setShowEditModal(false)} />
       )}
 
       {/* Header */}
@@ -176,6 +254,10 @@ export default function SolarClawBuilding() {
           <span className={cn("text-xs px-2.5 py-1 rounded-full border font-medium", proposalStatusBg(building.proposalStatus))}>
             {building.proposalStatus}
           </span>
+          <button onClick={() => setShowEditModal(true)}
+            className="flex items-center gap-1.5 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg px-2.5 py-1.5 hover:bg-amber-500/30 transition-colors">
+            <Pencil className="w-3 h-3" /> Edit
+          </button>
         </div>
       </header>
 
@@ -252,17 +334,13 @@ export default function SolarClawBuilding() {
               </div>
             </div>
 
-            {/* Pain signals */}
-            {building.painSignals.length > 0 && (
-              <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Pain Signals</div>
-                <div className="space-y-1.5">
-                  {building.painSignals.map(s => (
-                    <div key={s} className="text-xs text-pink-400 flex items-center gap-1.5"><span>📌</span><span>{s}</span></div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Pain signals — interactive */}
+            <PainSignalsCard
+              buildingName={building.name}
+              signals={building.painSignals}
+              onAdd={(s) => addPainSignal(building.id, s)}
+              onRemove={(s) => removePainSignal(building.id, s)}
+            />
           </div>
         </div>
 

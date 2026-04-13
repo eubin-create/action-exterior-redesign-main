@@ -7,7 +7,7 @@ import { useSolarClaw } from "@/context/SolarClawContext";
 import { formatCurrency } from "@/data/solarclaw";
 
 const NAV_ITEMS = [
-  { href: "/solarclaw", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/solarclaw", label: "Dashboard", icon: LayoutDashboard },
   { href: "/solarclaw/activity", label: "Activity Feed", icon: Activity },
   { href: "/solarclaw/prospects", label: "Prospects", icon: Building2 },
   { href: "/solarclaw/proposals", label: "Proposals", icon: FileText },
@@ -67,11 +67,7 @@ export function SolarClawLayout({ children }: SolarClawLayoutProps) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 pt-3 space-y-0.5">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
-            const active = exact
-              ? location.pathname === href
-              : location.pathname.startsWith(href) && location.pathname !== "/solarclaw";
-            // Fix: dashboard exact match
+          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const isActive = href === "/solarclaw"
               ? location.pathname === href
               : location.pathname.startsWith(href);

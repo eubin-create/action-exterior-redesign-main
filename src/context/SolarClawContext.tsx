@@ -4,7 +4,6 @@ import {
   useState,
   useCallback,
   useEffect,
-  useRef,
   type ReactNode,
 } from "react";
 import type {
@@ -58,19 +57,17 @@ export interface CreateCampaignInput {
 export function calcBuildingData(yearBuilt: number, roofSqft: number) {
   const currentYear = new Date().getFullYear();
   const roofAge = currentYear - yearBuilt;
-  const rawScore = (roofAge / 25) * 100;
-  const urgencyScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+  const urgencyScore = Math.min(100, Math.max(0, Math.round((roofAge / 25) * 100)));
   const urgencyLabel: UrgencyLabel =
     urgencyScore >= 80 ? "Critical" : urgencyScore >= 60 ? "Aging" : "Newer";
 
   // Solar: ~1 commercial panel (400W) per 24 sqft, 70% usable coverage
   const panelCount = Math.max(1, Math.floor((roofSqft * 0.7) / 24));
   const systemKw = Math.round(panelCount * 0.4 * 10) / 10;
-  const annualKwh = Math.round(systemKw * 1_400); // ~1,400 effective sun-hours/yr (Phoenix)
+  const annualKwh = Math.round(systemKw * 1_400);
   const sunHoursPerYear = 3_850;
-  const maxArrayAreaM2 = Math.round(roofSqft * 0.065); // sqft → m²
+  const maxArrayAreaM2 = Math.round(roofSqft * 0.065);
 
-  // ITC
   const systemCost = Math.round(systemKw * 2_800);
   const federalItc = Math.round(systemCost * 0.3);
   const maxItc = Math.round(systemCost * 0.5);
@@ -81,25 +78,31 @@ export function calcBuildingData(yearBuilt: number, roofSqft: number) {
       ? Math.round(((systemCost - federalItc) / annualSavings) * 10) / 10
       : 0;
 
-  const solar: SolarData = {
-    panelCount,
-    systemKw,
-    annualKwh,
-    sunHoursPerYear,
-    roofSqft,
-    maxArrayAreaM2,
-  };
-
-  const itc: ITC = {
-    systemCost,
-    federalItc,
-    maxItc,
-    savings25yr,
-    paybackYears,
-    safeHarborDeadline: "Jul 4, 2026",
-  };
+  const solar: SolarData = { panelCount, systemKw, annualKwh, sunHoursPerYear, roofSqft, maxArrayAreaM2 };
+  const itc: ITC = { systemCost, federalItc, maxItc, savings25yr, paybackYears, safeHarborDeadline: "Jul 4, 2026" };
 
   return { roofAge, urgencyScore, urgencyLabel, solar, itc };
+}
+
+// ── Pain signal keyword detector ──────────────────────────────────────────────
+
+const PAIN_KEYWORDS: [RegExp, string][] = [
+  [/family.?own/i, "Family-owned business"],
+  [/refrig|cold storage|freezer|cooler/i, "24/7 refrigeration load"],
+  [/warehouse|distribution|fulfillment/i, "Large warehouse footprint"],
+  [/manufactur|fabricat|processing/i, "High manufacturing energy load"],
+  [/24.?7|around.the.clock|continuous/i, "24/7 operations"],
+  [/fleet|charging|electric vehicle|ev /i, "Fleet charging facility"],
+  [/grocery|supermarket|food/i, "Food retail energy load"],
+  [/hotel|motel|hospitality/i, "Hospitality high energy load"],
+  [/data center|server|colocation/i, "Data center power demands"],
+  [/brewing|brewery|winery|distill/i, "Brewing/production energy load"],
+];
+
+export function detectPainSignals(text: string): string[] {
+  return PAIN_KEYWORDS
+    .filter(([pattern]) => pattern.test(text))
+    .map(([, label]) => label);
 }
 
 // ── Event factory ─────────────────────────────────────────────────────────────
@@ -139,7 +142,7 @@ function makeEvent(
   };
 }
 
-// ── Pipeline helpers ──────────────────────────────────────────────────────────
+// ── Pipeline stage order ──────────────────────────────────────────────────────
 
 const PIPELINE_ORDER: PipelineStatus[] = [
   "scanned",
@@ -151,20 +154,13 @@ const PIPELINE_ORDER: PipelineStatus[] = [
   "proposal_sent",
 ];
 
-export function nextPipelineStage(
-  current: PipelineStatus
-): PipelineStatus | null {
+function nextPipelineStage(current: PipelineStatus): PipelineStatus | null {
   const idx = PIPELINE_ORDER.indexOf(current);
   if (idx < 0 || idx >= PIPELINE_ORDER.length - 1) return null;
   return PIPELINE_ORDER[idx + 1];
 }
 
-export function pipelineProgress(status: PipelineStatus): number {
-  const idx = PIPELINE_ORDER.indexOf(status);
-  return Math.round(((idx + 1) / PIPELINE_ORDER.length) * 100);
-}
-
-// ── localStorage helpers ───────────────────────────────────────────────────────
+// ── localStorage helpers ──────────────────────────────────────────────────────
 
 const STORAGE_KEY = "solarclaw_v1";
 
@@ -182,15 +178,18 @@ function saveState(state: SolarClawState) {
   } catch {}
 }
 
-// ── Context ───────────────────────────────────────────────────────────────────
+// ── Context interface ─────────────────────────────────────────────────────────
 
 interface SolarClawContextValue {
   state: SolarClawState;
   createCampaign: (input: CreateCampaignInput) => void;
   clearCampaign: () => void;
   addBuilding: (input: AddBuildingInput) => Building;
+  updateBuilding: (id: string, input: AddBuildingInput) => void;
   deleteBuilding: (id: string) => void;
   addOwner: (buildingId: string, owner: AddOwnerInput) => void;
+  addPainSignal: (buildingId: string, signal: string) => void;
+  removePainSignal: (buildingId: string, signal: string) => void;
   advancePipeline: (buildingId: string) => void;
   markProposalOpened: (buildingId: string) => void;
   markProposalReplied: (buildingId: string) => void;
@@ -202,22 +201,16 @@ const SolarClawContext = createContext<SolarClawContextValue | null>(null);
 
 export function SolarClawProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SolarClawState>(loadState);
-  const stateRef = useRef(state);
-  stateRef.current = state;
 
-  // persist on every change
   useEffect(() => {
     saveState(state);
   }, [state]);
 
   function patch(updater: (prev: SolarClawState) => SolarClawState) {
-    setState((prev) => {
-      const next = updater(prev);
-      return next;
-    });
+    setState(updater);
   }
 
-  // ── Campaign ─────────────────────────────────────────────────────────────
+  // ── Campaign ──────────────────────────────────────────────────────────────
 
   const createCampaign = useCallback((input: CreateCampaignInput) => {
     const campaign: Campaign = {
@@ -238,13 +231,9 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
       input.name,
       "campaign_started",
       `Campaign started — ${input.name}`,
-      `Scanning commercial buildings within ${input.radiusMiles}-mile radius of ${input.city}, ${input.state}`
+      `Targeting ${input.city}, ${input.state} within ${input.radiusMiles}-mile radius`
     );
-    patch((prev) => ({
-      ...prev,
-      campaign,
-      events: [evt, ...prev.events],
-    }));
+    patch((prev) => ({ ...prev, campaign, events: [evt, ...prev.events] }));
   }, []);
 
   const clearCampaign = useCallback(() => {
@@ -259,6 +248,9 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
       input.roofSqft
     );
 
+    // Auto-detect pain signals from name
+    const painSignals = detectPainSignals(input.name);
+
     const building: Building = {
       id: `bldg-${Date.now()}`,
       name: input.name,
@@ -271,74 +263,37 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
       roofAge,
       urgencyScore,
       urgencyLabel,
-      painSignals: [],
-      pipelineStatus: "scanned",
+      painSignals,
+      pipelineStatus: "itc_calculated",
       solar,
-      owner: {
-        name: "",
-        title: "",
-        company: "",
-        email: "",
-        phone: "",
-        emailVerified: false,
-        deliverability: 0,
-      },
+      owner: { name: "", title: "", company: "", email: "", phone: "", emailVerified: false, deliverability: 0 },
       itc,
       proposalStatus: "Pending",
       footprintPolygon: [],
     };
 
-    // Auto-generate initial pipeline events
     const now = Date.now();
     const events: ActivityEvent[] = [
-      makeEvent(
-        building.id,
-        building.name,
-        "roof_captured",
+      makeEvent(building.id, building.name, "roof_captured",
         `Roof captured — ${building.name}`,
-        `${input.roofSqft.toLocaleString()} sqft via satellite imagery · ${input.city}, ${input.state}`
-      ),
+        `${input.roofSqft.toLocaleString()} sqft · ${input.city}, ${input.state}`),
+      makeEvent(building.id, building.name, "aging_detected",
+        `Aging detected — ${building.name}`,
+        `Built ${input.yearBuilt} · roof age ~${roofAge} years · ${urgencyLabel} threshold`),
+      makeEvent(building.id, building.name, "solar_scored",
+        `Solar viability scored — ${building.name}`,
+        `${solar.systemKw.toLocaleString()} kW · ${solar.panelCount.toLocaleString()} panels · $${(itc.savings25yr / 1_000_000).toFixed(1)}M 25-yr savings`),
+      makeEvent(building.id, building.name, "itc_calculated",
+        `ITC calculated — ${building.name}`,
+        `$${(itc.federalItc / 1_000_000).toFixed(2)}M federal credit · safe harbor ${itc.safeHarborDeadline}`),
     ];
 
-    // Auto-advance to scored + solar_analyzed + itc_calculated immediately
-    let finalStatus: PipelineStatus = "scanned";
+    if (painSignals.length > 0) {
+      events.push(makeEvent(building.id, building.name, "pain_signal",
+        `Pain signals detected — ${building.name}`,
+        painSignals.slice(0, 2).join(" · ")));
+    }
 
-    events.push(
-      makeEvent(
-        building.id,
-        building.name,
-        "aging_detected",
-        `Aging detected — ${building.name}`,
-        `Built ${input.yearBuilt} · roof age ~${roofAge} years · ${urgencyLabel} threshold`
-      )
-    );
-    finalStatus = "scored";
-
-    events.push(
-      makeEvent(
-        building.id,
-        building.name,
-        "solar_scored",
-        `Solar viability scored — ${building.name}`,
-        `${solar.systemKw.toLocaleString()} kW system · ${solar.sunHoursPerYear.toLocaleString()} sun hrs/yr · $${(itc.savings25yr / 1_000_000).toFixed(1)}M 25-yr savings`
-      )
-    );
-    finalStatus = "solar_analyzed";
-
-    events.push(
-      makeEvent(
-        building.id,
-        building.name,
-        "itc_calculated",
-        `ITC calculated — ${building.name}`,
-        `$${(itc.federalItc / 1_000_000).toFixed(2)}M federal credit available · safe harbor: ${itc.safeHarborDeadline}`
-      )
-    );
-    finalStatus = "itc_calculated";
-
-    building.pipelineStatus = finalStatus;
-
-    // Stagger timestamps so events appear in order
     events.forEach((evt, i) => {
       evt.timestamp = new Date(now + i * 800).toISOString();
     });
@@ -348,12 +303,10 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
         ? {
             ...prev.campaign,
             buildingsScanned: prev.campaign.buildingsScanned + 1,
-            buildingsQualified:
-              urgencyScore >= 60
-                ? prev.campaign.buildingsQualified + 1
-                : prev.campaign.buildingsQualified,
-            totalPipelineValue:
-              prev.campaign.totalPipelineValue + itc.savings25yr,
+            buildingsQualified: urgencyScore >= 60
+              ? prev.campaign.buildingsQualified + 1
+              : prev.campaign.buildingsQualified,
+            totalPipelineValue: prev.campaign.totalPipelineValue + itc.savings25yr,
           }
         : prev.campaign;
 
@@ -368,6 +321,40 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
     return building;
   }, []);
 
+  const updateBuilding = useCallback((id: string, input: AddBuildingInput) => {
+    const { roofAge, urgencyScore, urgencyLabel, solar, itc } = calcBuildingData(
+      input.yearBuilt,
+      input.roofSqft
+    );
+    const evt = makeEvent(id, input.name, "roof_captured",
+      `Building updated — ${input.name}`,
+      `Recalculated: ${solar.systemKw.toLocaleString()} kW · ${formatCurrency(itc.federalItc)} ITC`);
+
+    patch((prev) => ({
+      ...prev,
+      buildings: prev.buildings.map((b) =>
+        b.id === id
+          ? {
+              ...b,
+              name: input.name,
+              address: input.address,
+              city: input.city,
+              state: input.state,
+              yearBuilt: input.yearBuilt,
+              lat: input.lat ?? b.lat,
+              lng: input.lng ?? b.lng,
+              roofAge,
+              urgencyScore,
+              urgencyLabel,
+              solar,
+              itc,
+            }
+          : b
+      ),
+      events: [evt, ...prev.events],
+    }));
+  }, []);
+
   const deleteBuilding = useCallback((id: string) => {
     patch((prev) => ({
       ...prev,
@@ -378,65 +365,76 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
 
   // ── Owner ─────────────────────────────────────────────────────────────────
 
-  const addOwner = useCallback(
-    (buildingId: string, ownerInput: AddOwnerInput) => {
-      patch((prev) => {
-        const building = prev.buildings.find((b) => b.id === buildingId);
-        if (!building) return prev;
+  const addOwner = useCallback((buildingId: string, ownerInput: AddOwnerInput) => {
+    patch((prev) => {
+      const building = prev.buildings.find((b) => b.id === buildingId);
+      if (!building) return prev;
 
-        const deliverability = ownerInput.email.includes("@")
-          ? Math.floor(Math.random() * 15) + 84
-          : 0;
+      const deliverability = ownerInput.email.includes("@")
+        ? Math.floor(Math.random() * 15) + 84
+        : 0;
 
-        const owner: Owner = {
-          ...ownerInput,
-          emailVerified: deliverability >= 90,
-          deliverability,
-        };
+      const owner: Owner = { ...ownerInput, emailVerified: deliverability >= 90, deliverability };
 
-        const events: ActivityEvent[] = [
-          makeEvent(
-            buildingId,
-            building.name,
-            "owner_identified",
-            `Owner identified — ${ownerInput.name}`,
-            `${ownerInput.title} · ${ownerInput.company}`
-          ),
-        ];
+      const events: ActivityEvent[] = [
+        makeEvent(buildingId, building.name, "owner_identified",
+          `Owner identified — ${ownerInput.name}`,
+          `${ownerInput.title} · ${ownerInput.company}`),
+      ];
 
-        if (owner.emailVerified) {
-          events.push(
-            makeEvent(
-              buildingId,
-              building.name,
-              "email_verified",
-              `Email verified — ${ownerInput.email}`,
-              `${deliverability}% deliverable · SMTP check passed`
-            )
-          );
-        }
+      if (owner.emailVerified) {
+        events.push(makeEvent(buildingId, building.name, "email_verified",
+          `Email verified — ${ownerInput.email}`,
+          `${deliverability}% deliverable · SMTP check passed`));
+      }
 
-        const newStatus: PipelineStatus =
-          building.pipelineStatus === "itc_calculated" ||
-          building.pipelineStatus === "solar_analyzed" ||
-          building.pipelineStatus === "scored" ||
-          building.pipelineStatus === "scanned"
-            ? "owner_found"
-            : building.pipelineStatus;
+      const newStatus: PipelineStatus =
+        ["itc_calculated", "solar_analyzed", "scored", "scanned"].includes(building.pipelineStatus)
+          ? "owner_found"
+          : building.pipelineStatus;
 
-        return {
-          ...prev,
-          buildings: prev.buildings.map((b) =>
-            b.id === buildingId
-              ? { ...b, owner, pipelineStatus: newStatus }
-              : b
-          ),
-          events: [...events.reverse(), ...prev.events],
-        };
-      });
-    },
-    []
-  );
+      return {
+        ...prev,
+        buildings: prev.buildings.map((b) =>
+          b.id === buildingId ? { ...b, owner, pipelineStatus: newStatus } : b
+        ),
+        events: [...events.reverse(), ...prev.events],
+      };
+    });
+  }, []);
+
+  // ── Pain signals ──────────────────────────────────────────────────────────
+
+  const addPainSignal = useCallback((buildingId: string, signal: string) => {
+    patch((prev) => {
+      const building = prev.buildings.find((b) => b.id === buildingId);
+      if (!building || building.painSignals.includes(signal)) return prev;
+
+      const evt = makeEvent(buildingId, building.name, "pain_signal",
+        `Pain signal added — ${building.name}`, signal);
+
+      return {
+        ...prev,
+        buildings: prev.buildings.map((b) =>
+          b.id === buildingId
+            ? { ...b, painSignals: [...b.painSignals, signal] }
+            : b
+        ),
+        events: [evt, ...prev.events],
+      };
+    });
+  }, []);
+
+  const removePainSignal = useCallback((buildingId: string, signal: string) => {
+    patch((prev) => ({
+      ...prev,
+      buildings: prev.buildings.map((b) =>
+        b.id === buildingId
+          ? { ...b, painSignals: b.painSignals.filter((s) => s !== signal) }
+          : b
+      ),
+    }));
+  }, []);
 
   // ── Pipeline advance ──────────────────────────────────────────────────────
 
@@ -447,41 +445,19 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
       const next = nextPipelineStage(building.pipelineStatus);
       if (!next) return prev;
 
-      const eventMap: Partial<
-        Record<PipelineStatus, () => ActivityEvent>
-      > = {
-        scored: () =>
-          makeEvent(
-            buildingId,
-            building.name,
-            "aging_detected",
-            `Roof scored — ${building.name}`,
-            `Built ${building.yearBuilt} · ${building.roofAge} yr old roof · Score: ${building.urgencyScore}`
-          ),
-        solar_analyzed: () =>
-          makeEvent(
-            buildingId,
-            building.name,
-            "solar_scored",
-            `Solar analyzed — ${building.name}`,
-            `${building.solar.systemKw} kW · ${building.solar.panelCount} panels`
-          ),
-        itc_calculated: () =>
-          makeEvent(
-            buildingId,
-            building.name,
-            "itc_calculated",
-            `ITC recalculated — ${building.name}`,
-            `$${(building.itc.federalItc / 1_000_000).toFixed(2)}M federal ITC`
-          ),
-        rendered: () =>
-          makeEvent(
-            buildingId,
-            building.name,
-            "roof_captured",
-            `Roof render updated — ${building.name}`,
-            `Panel layout finalized · ${building.solar.panelCount} panels`
-          ),
+      const eventMap: Partial<Record<PipelineStatus, () => ActivityEvent>> = {
+        scored: () => makeEvent(buildingId, building.name, "aging_detected",
+          `Roof scored — ${building.name}`,
+          `Built ${building.yearBuilt} · ${building.roofAge} yr old roof · Score: ${building.urgencyScore}`),
+        solar_analyzed: () => makeEvent(buildingId, building.name, "solar_scored",
+          `Solar analyzed — ${building.name}`,
+          `${building.solar.systemKw} kW · ${building.solar.panelCount} panels`),
+        itc_calculated: () => makeEvent(buildingId, building.name, "itc_calculated",
+          `ITC recalculated — ${building.name}`,
+          `${formatCurrency(building.itc.federalItc)} federal ITC`),
+        rendered: () => makeEvent(buildingId, building.name, "roof_captured",
+          `Roof render updated — ${building.name}`,
+          `Panel layout finalized · ${building.solar.panelCount} panels`),
       };
 
       const evt = eventMap[next]?.();
@@ -501,32 +477,20 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
     patch((prev) => {
       const building = prev.buildings.find((b) => b.id === buildingId);
       if (!building) return prev;
-      const evt = makeEvent(
-        buildingId,
-        building.name,
-        "proposal_sent",
+      const evt = makeEvent(buildingId, building.name, "proposal_sent",
         `Proposal sent — ${building.owner.name || building.name}`,
         building.owner.email
           ? `${building.owner.email} · ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-          : undefined
-      );
+          : undefined);
       const updatedCampaign = prev.campaign
-        ? {
-            ...prev.campaign,
-            proposalsSent: prev.campaign.proposalsSent + 1,
-          }
+        ? { ...prev.campaign, proposalsSent: prev.campaign.proposalsSent + 1 }
         : prev.campaign;
       return {
         ...prev,
         campaign: updatedCampaign,
         buildings: prev.buildings.map((b) =>
           b.id === buildingId
-            ? {
-                ...b,
-                pipelineStatus: "proposal_sent" as PipelineStatus,
-                proposalStatus: "Sent" as const,
-                proposalSentAt: new Date().toISOString(),
-              }
+            ? { ...b, pipelineStatus: "proposal_sent" as PipelineStatus, proposalStatus: "Sent" as const, proposalSentAt: new Date().toISOString() }
             : b
         ),
         events: [evt, ...prev.events],
@@ -538,13 +502,8 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
     patch((prev) => {
       const building = prev.buildings.find((b) => b.id === buildingId);
       if (!building) return prev;
-      const evt = makeEvent(
-        buildingId,
-        building.name,
-        "proposal_opened",
-        `Proposal opened — ${building.owner.name || building.name}`,
-        `Marked as opened`
-      );
+      const evt = makeEvent(buildingId, building.name, "proposal_opened",
+        `Proposal opened — ${building.owner.name || building.name}`, `Marked as opened`);
       return {
         ...prev,
         buildings: prev.buildings.map((b) =>
@@ -559,13 +518,8 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
     patch((prev) => {
       const building = prev.buildings.find((b) => b.id === buildingId);
       if (!building) return prev;
-      const evt = makeEvent(
-        buildingId,
-        building.name,
-        "proposal_opened",
-        `Reply received — ${building.owner.name || building.name}`,
-        `Marked as replied`
-      );
+      const evt = makeEvent(buildingId, building.name, "proposal_opened",
+        `Reply received — ${building.owner.name || building.name}`, `Marked as replied`);
       return {
         ...prev,
         buildings: prev.buildings.map((b) =>
@@ -583,21 +537,17 @@ export function SolarClawProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SolarClawContext.Provider
-      value={{
-        state,
-        createCampaign,
-        clearCampaign,
-        addBuilding,
-        deleteBuilding,
-        addOwner,
-        advancePipeline,
-        markProposalOpened,
-        markProposalReplied,
-        sendProposal,
-        clearAll,
-      }}
-    >
+    <SolarClawContext.Provider value={{
+      state,
+      createCampaign, clearCampaign,
+      addBuilding, updateBuilding, deleteBuilding,
+      addOwner,
+      addPainSignal, removePainSignal,
+      advancePipeline,
+      markProposalOpened, markProposalReplied,
+      sendProposal,
+      clearAll,
+    }}>
       {children}
     </SolarClawContext.Provider>
   );
@@ -607,4 +557,9 @@ export function useSolarClaw() {
   const ctx = useContext(SolarClawContext);
   if (!ctx) throw new Error("useSolarClaw must be used inside SolarClawProvider");
   return ctx;
+}
+
+// Tiny helper used inside context (avoids circular dep with solarclaw.ts)
+function formatCurrency(v: number) {
+  return v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}K`;
 }

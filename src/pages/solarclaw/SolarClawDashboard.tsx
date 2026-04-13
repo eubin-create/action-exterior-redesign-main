@@ -100,6 +100,7 @@ export default function SolarClawDashboard() {
   const { campaign, buildings, events } = state;
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showAddBuilding, setShowAddBuilding] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const recentEvents = events.slice(0, 6);
   const topProspects = [...buildings]
@@ -139,9 +140,24 @@ export default function SolarClawDashboard() {
               <Link to="/solarclaw/activity" className="flex items-center gap-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
                 Live Feed <ArrowRight className="w-3 h-3" />
               </Link>
-              <button onClick={clearAll} title="Reset all data" className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {confirmReset ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-red-400">Reset all data?</span>
+                  <button onClick={() => { clearAll(); setConfirmReset(false); }}
+                    className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg px-2.5 py-1 hover:bg-red-500/30 transition-colors">
+                    Yes, reset
+                  </button>
+                  <button onClick={() => setConfirmReset(false)}
+                    className="text-xs bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-lg px-2.5 py-1 hover:bg-zinc-700 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmReset(true)} title="Reset all data"
+                  className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </header>
 

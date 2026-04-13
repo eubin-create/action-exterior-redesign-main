@@ -1,25 +1,27 @@
 import { useState, useMemo } from "react";
-import { X, Building2, Sun, DollarSign, Zap, ChevronRight } from "lucide-react";
+import { X, Pencil, Sun, DollarSign, Zap } from "lucide-react";
 import { useSolarClaw, calcBuildingData, type AddBuildingInput } from "@/context/SolarClawContext";
-import { formatCurrency, urgencyBg } from "@/data/solarclaw";
+import { formatCurrency, urgencyBg, type Building } from "@/data/solarclaw";
 import { cn } from "@/lib/utils";
 
 interface Props {
+  building: Building;
   onClose: () => void;
-  onAdded?: (id: string) => void;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-export function AddBuildingModal({ onClose, onAdded }: Props) {
-  const { addBuilding } = useSolarClaw();
+export function EditBuildingModal({ building, onClose }: Props) {
+  const { updateBuilding } = useSolarClaw();
   const [form, setForm] = useState<AddBuildingInput>({
-    name: "",
-    address: "",
-    city: "",
-    state: "AZ",
-    yearBuilt: 1990,
-    roofSqft: 50000,
+    name: building.name,
+    address: building.address,
+    city: building.city,
+    state: building.state,
+    yearBuilt: building.yearBuilt,
+    roofSqft: building.solar.roofSqft,
+    lat: building.lat,
+    lng: building.lng,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof AddBuildingInput, string>>>({});
 
@@ -49,8 +51,7 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    const building = addBuilding(form);
-    onAdded?.(building.id);
+    updateBuilding(building.id, form);
     onClose();
   }
 
@@ -82,18 +83,23 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
     </div>
   );
 
+  // Show diff for changed numeric fields
+  const itcDelta = preview
+    ? preview.itc.federalItc - building.itc.federalItc
+    : 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-sky-400" />
+          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+            <Pencil className="w-4 h-4 text-amber-400" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-white">Add Building</h2>
-            <p className="text-xs text-zinc-500">ITC & solar estimates calculated instantly</p>
+            <h2 className="text-sm font-semibold text-white">Edit Building</h2>
+            <p className="text-xs text-zinc-500 truncate max-w-[280px]">{building.name}</p>
           </div>
           <button onClick={onClose} className="ml-auto p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
             <X className="w-4 h-4" />
@@ -103,22 +109,17 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
         <div className="flex-1 overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <div className="p-6 grid grid-cols-2 gap-6">
-              {/* Left: Form fields */}
+              {/* Left: form */}
               <div className="space-y-4">
                 <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Building Info</div>
-
                 <Field label="Building / Company Name" name="name" placeholder="e.g. Shamrock Foods Warehouse" />
                 <Field label="Street Address" name="address" placeholder="e.g. 3900 E Camelback Rd" />
-
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="City" name="city" placeholder="Phoenix" />
                   <div>
                     <label className="block text-xs text-zinc-400 mb-1.5">State</label>
-                    <select
-                      value={form.state}
-                      onChange={(e) => set("state", e.target.value)}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500"
-                    >
+                    <select value={form.state} onChange={(e) => set("state", e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500">
                       {["AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","HI","IA","ID","IL","IN","KS","KY","LA","MA","MD","ME","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","NY","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VA","VT","WA","WI","WV","WY"].map((s) => (
                         <option key={s} value={s}>{s}</option>
                       ))}
@@ -130,13 +131,13 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-3">Roof Details</div>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Year Built" name="yearBuilt" type="number" min={1900} max={CURRENT_YEAR} />
-                    <Field label="Roof Sqft" name="roofSqft" type="number" min={1000} step={1000} placeholder="50000" />
+                    <Field label="Roof Sqft" name="roofSqft" type="number" min={1000} step={1000} />
                   </div>
                 </div>
 
                 <div className="border-t border-zinc-800 pt-4">
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Coordinates</div>
-                  <p className="text-[10px] text-zinc-600 mb-3">Optional — used for map display only. Leave blank to use city center.</p>
+                  <p className="text-[10px] text-zinc-600 mb-3">Optional — used for map display only</p>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Latitude" name="lat" type="number" step={0.0001} placeholder="33.4484" />
                     <Field label="Longitude" name="lng" type="number" step={0.0001} placeholder="-112.0740" />
@@ -144,18 +145,17 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                 </div>
               </div>
 
-              {/* Right: Live ITC preview */}
+              {/* Right: live preview */}
               <div className="space-y-3">
-                <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Live Estimates</div>
+                <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Updated Estimates</div>
 
                 {!preview ? (
                   <div className="rounded-xl bg-zinc-800/50 border border-zinc-700/50 p-6 flex flex-col items-center justify-center text-center h-48">
                     <Zap className="w-8 h-8 text-zinc-600 mb-2" />
-                    <p className="text-xs text-zinc-500">Enter year built & sqft to see instant estimates</p>
+                    <p className="text-xs text-zinc-500">Enter valid year built & sqft</p>
                   </div>
                 ) : (
                   <>
-                    {/* Urgency */}
                     <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-zinc-500">Urgency Score</span>
@@ -167,13 +167,10 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                         <div className="text-3xl font-bold text-white">{preview.urgencyScore}</div>
                         <div className="flex-1">
                           <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${preview.urgencyScore}%`,
-                                backgroundColor: preview.urgencyLabel === "Critical" ? "#f87171" : preview.urgencyLabel === "Aging" ? "#fbbf24" : "#34d399",
-                              }}
-                            />
+                            <div className="h-full rounded-full" style={{
+                              width: `${preview.urgencyScore}%`,
+                              backgroundColor: preview.urgencyLabel === "Critical" ? "#f87171" : preview.urgencyLabel === "Aging" ? "#fbbf24" : "#34d399",
+                            }} />
                           </div>
                           <div className="text-[10px] text-zinc-500 mt-1">
                             Built {form.yearBuilt} · {preview.roofAge} yr old roof
@@ -182,7 +179,6 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                       </div>
                     </div>
 
-                    {/* Solar */}
                     <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 p-4 space-y-2">
                       <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
                         <Sun className="w-3 h-3 text-yellow-400" />Solar Design
@@ -199,7 +195,6 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                       ))}
                     </div>
 
-                    {/* ITC */}
                     <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 p-4 space-y-2">
                       <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
                         <DollarSign className="w-3 h-3 text-green-400" />Federal ITC
@@ -217,22 +212,30 @@ export function AddBuildingModal({ onClose, onAdded }: Props) {
                       ))}
                     </div>
 
-                    <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-400 flex items-center gap-1.5">
-                      <span>⏰</span> Safe harbor deadline: Jul 4, 2026
-                    </div>
+                    {itcDelta !== 0 && (
+                      <div className={cn(
+                        "rounded-lg border p-2.5 text-xs flex items-center gap-2",
+                        itcDelta > 0
+                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          : "bg-red-500/10 border-red-500/20 text-red-400"
+                      )}>
+                        <span>{itcDelta > 0 ? "▲" : "▼"}</span>
+                        <span>ITC changes by {formatCurrency(Math.abs(itcDelta))} vs. current</span>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
             </div>
 
-            {/* Footer */}
             <div className="px-6 pb-6 flex gap-3 border-t border-zinc-800 pt-4">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-zinc-700 text-sm text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors">
+              <button type="button" onClick={onClose}
+                className="flex-1 py-2.5 rounded-lg border border-zinc-700 text-sm text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors">
                 Cancel
               </button>
-              <button type="submit" className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-sm font-semibold transition-colors">
-                Add to Pipeline
-                <ChevronRight className="w-4 h-4" />
+              <button type="submit"
+                className="flex-1 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold transition-colors">
+                Save Changes
               </button>
             </div>
           </form>
