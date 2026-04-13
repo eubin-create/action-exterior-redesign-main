@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cowboy Roofing &amp; Exteriors</title>
+  <script>
+    // GitHub Pages SPA redirect trick.
+    // Encodes the current path/query into a ?p=/ query param on the root,
+    // which index.html decodes and restores into window.history.
+    var l = window.location;
+    var base = l.pathname.split('/').slice(0, 2).join('/');
+    l.replace(
+      l.protocol + '//' + l.host + base +
+      '/?p=/' + l.pathname.slice(base.length + 1).replace(/&/g, '~and~') +
+      (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  </script>
+</head>
+<body></body>
+</html>
